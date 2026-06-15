@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import type { WaveformData, PhasePick, Station, SeismicEvent, UploadStatus, UploadHistoryItem } from '../types'
+import type { WaveformData, PhasePick, Station, SeismicEvent, UploadStatus, UploadHistoryItem, SavedWaveformResult } from '../types'
 
 export const useSeismicStore = defineStore('seismic', () => {
   const waveform = ref<WaveformData | null>(null)
@@ -14,6 +14,8 @@ export const useSeismicStore = defineStore('seismic', () => {
   const uploadErrorMessage = ref<string>('')
   const uploadHistory = ref<UploadHistoryItem[]>([])
   const showUploadToast = ref(false)
+  const lastSavedResult = ref<SavedWaveformResult | null>(null)
+  const STORAGE_KEY = 'seismic_last_saved_result'
   const events = ref<SeismicEvent[]>([
     { id: '1', magnitude: 4.2, depth: 12.5, originTime: '2025-01-15T08:23:41Z', location: '四川雅安' },
     { id: '2', magnitude: 3.8, depth: 8.3, originTime: '2025-01-14T14:12:05Z', location: '云南大理' },
@@ -26,6 +28,58 @@ export const useSeismicStore = defineStore('seismic', () => {
     { id: 'STA03', name: 'KMI', latitude: 25.0, longitude: 102.7, elevation: 1890 },
     { id: 'STA04', name: 'HIA', latitude: 49.3, longitude: 119.7, elevation: 610 },
   ])
+
+  function saveLastResult(fileName: string, fileSize: number) {
+    if (!waveform.value) return
+    const result: SavedWaveformResult = {
+      waveform: waveform.value,
+      picks: picks.value,
+      fileName,
+      fileSize,
+      savedAt: new Date().toISOString(),
+      stationName: selectedStation.value?.name
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(result))
+      lastSavedResult.value = result
+    } catch (e) {
+      console.warn('Failed to save result to localStorage:', e)
+    }
+  }
+
+  function loadLastSavedResult(): SavedWaveformResult | null {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const result = JSON.parse(stored) as SavedWaveformResult
+        lastSavedResult.value = result
+        return result
+      }
+    } catch (e) {
+      console.warn('Failed to load result from localStorage:', e)
+    }
+    return null
+  }
+
+  function applySavedResult(result: SavedWaveformResult) {
+    waveform.value = result.waveform
+    picks.value = result.picks
+    if (result.stationName) {
+      const station = stations.value.find(s => s.name === result.stationName)
+      if (station) selectedStation.value = station
+    }
+  }
+
+  function clearSavedResult() {
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+      lastSavedResult.value = null
+    } catch (e) {
+      console.warn('Failed to clear saved result:', e)
+    }
+  }
+
+  loadLastSavedResult()
 
   function generateMockWaveform(): WaveformData {
     const sr = 100  // sampling rate Hz
@@ -173,6 +227,7 @@ export const useSeismicStore = defineStore('seismic', () => {
         picks.value = data.picks || []
         setUploadStatus('success')
         addToHistory(file, 'success')
+        saveLastResult(file.name, file.size)
       } else {
         const errorMsg = `上传失败: ${resp.status} ${resp.statusText}`
         setUploadStatus('error', errorMsg)
@@ -191,8 +246,9 @@ export const useSeismicStore = defineStore('seismic', () => {
   return {
     waveform, picks, selectedStation, staWindow, ltaWindow, threshold,
     isLoading, events, stations, uploadStatus, uploadErrorMessage,
-    uploadHistory, showUploadToast,
+    uploadHistory, showUploadToast, lastSavedResult,
     loadMockData, staLtaPicking, uploadAndAnalyze, generateMockWaveform,
-    setUploadStatus, clearUploadToast, loadHistoryItem
+    setUploadStatus, clearUploadToast, loadHistoryItem,
+    saveLastResult, applySavedResult, clearSavedResult, loadLastSavedResult
   }
 })

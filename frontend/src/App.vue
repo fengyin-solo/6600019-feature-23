@@ -63,6 +63,21 @@
         加载模拟数据
       </button>
 
+      <!-- Restore Last Result -->
+      <button
+        v-if="store.lastSavedResult"
+        @click="restoreLastResult"
+        :disabled="store.uploadStatus === 'uploading' || store.uploadStatus === 'processing'"
+        :class="[
+          'py-2 rounded text-sm transition-colors flex items-center justify-center gap-2',
+          store.uploadStatus === 'uploading' || store.uploadStatus === 'processing'
+            ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+            : 'bg-purple-700 hover:bg-purple-600 text-white'
+        ]">
+        <span>💾</span>
+        <span>恢复上次结果</span>
+      </button>
+
       <!-- Upload History -->
       <div v-if="store.uploadHistory.length > 0" class="bg-gray-800 rounded-xl p-3">
         <div class="flex items-center justify-between mb-2">
@@ -175,8 +190,20 @@
     <!-- Main: Waveform Charts -->
     <div class="flex-1 flex flex-col gap-2 p-4 overflow-y-auto">
       <WaveformChart v-if="store.waveform" />
-      <div v-else class="flex-1 flex items-center justify-center text-gray-600">
-        请上传数据或加载模拟波形
+      <div v-else class="flex-1 flex flex-col items-center justify-center text-gray-600 gap-4">
+        <p class="text-lg">请上传数据或加载模拟波形</p>
+        <button
+          v-if="store.lastSavedResult"
+          @click="restoreLastResult"
+          class="px-6 py-3 bg-purple-700 hover:bg-purple-600 text-white rounded-lg transition-colors flex items-center gap-2">
+          <span class="text-xl">💾</span>
+          <div class="text-left">
+            <div class="font-medium">恢复上次结果</div>
+            <div class="text-xs text-purple-200">
+              {{ store.lastSavedResult.fileName }} · {{ formatTime(store.lastSavedResult.savedAt) }}
+            </div>
+          </div>
+        </button>
       </div>
     </div>
   </div>
@@ -217,6 +244,16 @@ function onUpload(e: Event) {
 
 function runPick() {
   store.picks = store.staLtaPicking()
+}
+
+function restoreLastResult() {
+  if (store.lastSavedResult) {
+    store.applySavedResult(store.lastSavedResult)
+    store.setUploadStatus('success', '已恢复上次保存的结果')
+    setTimeout(() => {
+      store.clearUploadToast()
+    }, 3000)
+  }
 }
 
 function formatTime(isoString: string): string {

@@ -42,3 +42,12 @@ export interface UploadHistoryItem {
   stationName?: string
   picksCount?: number
 }
+
+export interface SavedWaveformResult {
+  waveform: WaveformData
+  picks: PhasePick[]
+  fileName: string
+  fileSize: number
+  savedAt: string
+  stationName?: string
+}
