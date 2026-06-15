@@ -29,3 +29,16 @@ export interface SeismicEvent {
   originTime: string
   location: string
 }
+
+export type UploadStatus = 'idle' | 'uploading' | 'processing' | 'success' | 'error'
+
+export interface UploadHistoryItem {
+  id: string
+  fileName: string
+  fileSize: number
+  uploadTime: string
+  status: UploadStatus
+  errorMessage?: string
+  stationName?: string
+  picksCount?: number
+}

@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import type { WaveformData, PhasePick, Station, SeismicEvent } from '../types'
+import type { WaveformData, PhasePick, Station, SeismicEvent, UploadStatus, UploadHistoryItem } from '../types'
 
 export const useSeismicStore = defineStore('seismic', () => {
   const waveform = ref<WaveformData | null>(null)
@@ -10,6 +10,10 @@ export const useSeismicStore = defineStore('seismic', () => {
   const ltaWindow = ref(10.0)
   const threshold = ref(3.5)
   const isLoading = ref(false)
+  const uploadStatus = ref<UploadStatus>('idle')
+  const uploadErrorMessage = ref<string>('')
+  const uploadHistory = ref<UploadHistoryItem[]>([])
+  const showUploadToast = ref(false)
   const events = ref<SeismicEvent[]>([
     { id: '1', magnitude: 4.2, depth: 12.5, originTime: '2025-01-15T08:23:41Z', location: '四川雅安' },
     { id: '2', magnitude: 3.8, depth: 8.3, originTime: '2025-01-14T14:12:05Z', location: '云南大理' },
@@ -113,19 +117,72 @@ export const useSeismicStore = defineStore('seismic', () => {
     return newPicks
   }
 
+  function addToHistory(file: File, status: UploadStatus, errorMessage?: string) {
+    const historyItem: UploadHistoryItem = {
+      id: `upload_${Date.now()}`,
+      fileName: file.name,
+      fileSize: file.size,
+      uploadTime: new Date().toISOString(),
+      status,
+      errorMessage,
+      stationName: selectedStation.value?.name,
+      picksCount: picks.value.length
+    }
+    uploadHistory.value.unshift(historyItem)
+    if (uploadHistory.value.length > 10) {
+      uploadHistory.value = uploadHistory.value.slice(0, 10)
+    }
+  }
+
+  function setUploadStatus(status: UploadStatus, message: string = '') {
+    uploadStatus.value = status
+    uploadErrorMessage.value = message
+    if (status !== 'idle') {
+      showUploadToast.value = true
+    }
+  }
+
+  function clearUploadToast() {
+    showUploadToast.value = false
+    uploadStatus.value = 'idle'
+    uploadErrorMessage.value = ''
+  }
+
+  function loadHistoryItem(item: UploadHistoryItem) {
+    if (item.status === 'success') {
+      loadMockData()
+    }
+  }
+
   async function uploadAndAnalyze(file: File) {
     isLoading.value = true
+    setUploadStatus('uploading')
+
     try {
       const formData = new FormData()
       formData.append('file', file)
+
+      await new Promise(resolve => setTimeout(resolve, 500))
+      setUploadStatus('processing')
+
       const resp = await fetch('/api/waveform/upload', { method: 'POST', body: formData })
+
       if (resp.ok) {
         const data = await resp.json()
         waveform.value = data.waveform
         picks.value = data.picks || []
+        setUploadStatus('success')
+        addToHistory(file, 'success')
+      } else {
+        const errorMsg = `上传失败: ${resp.status} ${resp.statusText}`
+        setUploadStatus('error', errorMsg)
+        addToHistory(file, 'error', errorMsg)
       }
-    } catch {
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : '网络连接失败，已加载示例数据'
       loadMockData()
+      setUploadStatus('error', errorMsg)
+      addToHistory(file, 'error', errorMsg)
     } finally {
       isLoading.value = false
     }
@@ -133,7 +190,9 @@ export const useSeismicStore = defineStore('seismic', () => {
 
   return {
     waveform, picks, selectedStation, staWindow, ltaWindow, threshold,
-    isLoading, events, stations,
-    loadMockData, staLtaPicking, uploadAndAnalyze, generateMockWaveform
+    isLoading, events, stations, uploadStatus, uploadErrorMessage,
+    uploadHistory, showUploadToast,
+    loadMockData, staLtaPicking, uploadAndAnalyze, generateMockWaveform,
+    setUploadStatus, clearUploadToast, loadHistoryItem
   }
 })
